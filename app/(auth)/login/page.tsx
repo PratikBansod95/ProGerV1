@@ -2,8 +2,7 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getRoleHome } from "@/lib/auth/roles";
-import { getLoginUsers } from "@/lib/actions/auth";
-import { isNameLoginConfigured } from "@/lib/supabase/admin";
+import { getSupabaseEnv } from "@/lib/supabase/env";
 
 export default async function LoginPage({
   searchParams,
@@ -12,16 +11,14 @@ export default async function LoginPage({
 }) {
   const { error } = await searchParams;
 
-  if (isNameLoginConfigured()) {
+  if (getSupabaseEnv().isConfigured) {
     const user = await getCurrentUser();
     if (user) redirect(getRoleHome(user.role));
   }
 
-  const users = await getLoginUsers();
-
   return (
     <div className="flex min-h-screen items-center justify-center px-4">
-      <LoginForm users={users} initialError={error} />
+      <LoginForm initialError={error} />
     </div>
   );
 }

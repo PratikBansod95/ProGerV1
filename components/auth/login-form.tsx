@@ -1,16 +1,12 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { signInWithName } from "@/lib/actions/auth";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { getRoleHome } from "@/lib/auth/roles";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -19,38 +15,89 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-interface LoginUser {
-  id: string;
-  name: string;
-}
-
-export function LoginForm({
-  users,
-  initialError,
-}: {
-  users: LoginUser[];
-  initialError?: string;
-}) {
-  const [selectedUserId, setSelectedUserId] = useState("");
-  const [error, setError] = useState<string | null>(() => resolveError(initialError));
+export function LoginForm({ initialError }: { initialError?: string }) {
+  const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState<string | null>(() => {
+    if (initialError === "config") {
+      return "App is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel environment variables, then redeploy.";
+    }
+    if (initialError === "middleware") {
+      return "Something went wrong loading the app. Check Vercel logs and Supabase settings.";
+    }
+    if (initialError === "inactive") {
+      return "Your account is inactive. Contact your Admin.";
+    }
+    if (initialError === "unauthorized") {
+      return "You do not have access to that page.";
+    }
+    return null;
+  });
   const [isPending, startTransition] = useTransition();
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (!selectedUserId) {
-      setError("Select your name to continue.");
+    startTransition(async () => {
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        setError("Invalid email or password.");
+        return;
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        setError("Invalid email or password.");
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from("users")
+        .select("role, status")
+        .eq("id", user.id)
+        .single();
+
+      if (profile?.status === "inactive") {
+        await supabase.auth.signOut();
+        setError("Your account is inactive. Contact your Admin.");
+        return;
+      }
+
+      router.push(getRoleHome(profile?.role ?? "team_member"));
+      router.refresh();
+    });
+  }
+
+  async function handleForgotPassword() {
+    if (!email) {
+      setError("Enter your email first, then click Forgot password.");
       return;
     }
 
-    startTransition(async () => {
-      try {
-        await signInWithName(selectedUserId);
-      } catch {
-        setError("Could not sign in. Try again.");
-      }
-    });
+    const supabase = createClient();
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(
+      email,
+      { redirectTo: `${window.location.origin}/auth/callback` }
+    );
+
+    if (resetError) {
+      setError("Could not send reset email. Try again.");
+      return;
+    }
+
+    setError(null);
+    alert("If that email exists, a reset link has been sent.");
   }
 
   return (
@@ -58,35 +105,42 @@ export function LoginForm({
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">ProGer</CardTitle>
         <CardDescription>
-          Select your name to sign in
+          Project management with automatic risk detection
         </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Your name</Label>
-            <Select
-              value={selectedUserId}
-              onValueChange={(value) => value && setSelectedUserId(value)}
-            >
-              <SelectTrigger id="name">
-                <SelectValue placeholder="Select your name" />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    {user.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="email">Email</Label>
+            <Input
+              id="email"
+              type="email"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
           </div>
-
-          {users.length === 0 && (
-            <p className="text-sm text-muted-foreground">
-              No active users found. Ask your Admin to add you in Supabase.
-            </p>
-          )}
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <div className="flex gap-2">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? "Hide" : "Show"}
+              </Button>
+            </div>
+          </div>
 
           {error && (
             <p className="text-sm text-destructive" role="alert">
@@ -94,38 +148,23 @@ export function LoginForm({
             </p>
           )}
 
-          <Button
-            type="submit"
-            className="w-full"
-            disabled={isPending || users.length === 0}
-          >
-            {isPending ? "Signing in..." : "Continue"}
+          <Button type="submit" className="w-full" disabled={isPending}>
+            {isPending ? "Signing in..." : "Log In"}
           </Button>
 
+          <button
+            type="button"
+            onClick={handleForgotPassword}
+            className="w-full text-center text-sm text-muted-foreground hover:text-foreground"
+          >
+            Forgot password?
+          </button>
+
           <p className="text-center text-sm text-muted-foreground">
-            Email login is disabled for now.
+            New here? Contact your Admin.
           </p>
         </form>
       </CardContent>
     </Card>
   );
-}
-
-function resolveError(code?: string): string | null {
-  switch (code) {
-    case "config":
-      return "App is not configured. Add Supabase env vars (including SUPABASE_SERVICE_ROLE_KEY) in Vercel, then redeploy.";
-    case "invalid_name":
-      return "That name is not recognized or the account is inactive.";
-    case "missing_name":
-      return "Select your name to continue.";
-    case "auth":
-      return "Could not start your session. Check Supabase auth settings.";
-    case "inactive":
-      return "Your account is inactive. Contact your Admin.";
-    case "unauthorized":
-      return "You do not have access to that page.";
-    default:
-      return null;
-  }
 }

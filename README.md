@@ -6,7 +6,7 @@ Built with **Next.js**, **Supabase**, and **Tailwind CSS**.
 
 ## Features (MVP)
 
-- Name-only sign-in with role-based routing (Admin, PM, Team Member)
+- Invite-only authentication with role-based routing (Admin, PM, Team Member)
 - **Project Hub** — health badges, progress, search/filter/sort
 - **Project Detail** — Overview metrics, risk flags, Tasks board/table
 - **Task Detail** — checklist enforcement, override logging, activity feed
@@ -28,11 +28,7 @@ npm install
 
 ### 2. Configure environment
 
-Copy `.env.local.example` to `.env.local` and fill in:
-
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY` (required for name-only login; server-only)
+Copy `.env.local.example` to `.env.local` and fill in your Supabase credentials:
 
 ```bash
 cp .env.local.example .env.local
@@ -45,19 +41,16 @@ In the Supabase SQL editor, run:
 1. [`supabase/migrations/001_initial.sql`](supabase/migrations/001_initial.sql)
 2. [`supabase/seed.sql`](supabase/seed.sql)
 
-### 4. Create users
+### 4. Create the first admin user
 
-1. In Supabase **Authentication → Users**, create a user (email is stored but not used on the login screen).
-2. Ensure a matching row exists in `public.users` (created automatically by the auth trigger, or insert manually).
-3. Set their display name and role:
+1. In Supabase **Authentication → Users**, invite or create a user.
+2. In the SQL editor, promote them to admin:
 
 ```sql
 UPDATE users SET role = 'admin', name = 'Your Name' WHERE email = 'you@example.com';
 ```
 
-4. Sign in at `/login` by selecting your name from the list.
-
-Email/password login is disabled for now.
+3. Disable public sign-ups in **Authentication → Providers → Email**.
 
 ### 5. Start the dev server
 
