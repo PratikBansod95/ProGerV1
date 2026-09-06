@@ -15,12 +15,26 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-export function LoginForm() {
+export function LoginForm({ initialError }: { initialError?: string }) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(() => {
+    if (initialError === "config") {
+      return "App is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in Vercel environment variables, then redeploy.";
+    }
+    if (initialError === "middleware") {
+      return "Something went wrong loading the app. Check Vercel logs and Supabase settings.";
+    }
+    if (initialError === "inactive") {
+      return "Your account is inactive. Contact your Admin.";
+    }
+    if (initialError === "unauthorized") {
+      return "You do not have access to that page.";
+    }
+    return null;
+  });
   const [isPending, startTransition] = useTransition();
 
   async function handleSubmit(e: React.FormEvent) {
