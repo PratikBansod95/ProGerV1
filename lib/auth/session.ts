@@ -1,25 +1,36 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getSupabaseEnv } from "@/lib/supabase/env";
 import type { User } from "@/types/database";
 
 export async function getCurrentUser(): Promise<User | null> {
-  const supabase = await createClient();
-  const {
-    data: { user: authUser },
-  } = await supabase.auth.getUser();
+  if (!getSupabaseEnv().isConfigured) return null;
 
-  if (!authUser) return null;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
 
-  const { data: profile } = await supabase
-    .from("users")
-    .select("*")
-    .eq("id", authUser.id)
-    .single();
+    if (!authUser) return null;
 
-  return profile as User | null;
+    const { data: profile } = await supabase
+      .from("users")
+      .select("*")
+      .eq("id", authUser.id)
+      .single();
+
+    return profile as User | null;
+  } catch {
+    return null;
+  }
 }
 
 export async function requireUser(): Promise<User> {
+  if (!getSupabaseEnv().isConfigured) {
+    redirect("/login?error=config");
+  }
+
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   if (user.status === "inactive") redirect("/login?error=inactive");
